@@ -105,20 +105,21 @@ score_struct_only` + 39 结构特征（pLDDT、PAE、接触、化学、pDockQ、
 
 单个完整 notebook 复现论文中与**特征分析 / 模型评估**相关的全部图：
 
-| 章节（cell） | 内容 | 输出图 |
+| 章节 | 内容 | 输出图 |
 |---|---|---|
-| C01 | 全流程正负样本追踪表（可选，需原始中间数据）+ 特征加载 + train/test 划分 | 表格 |
-| C05 | 所有特征 ROC（高亮 Top3/Bottom3/ipTM） | `fig_roc_all_features.pdf` |
-| C06 | 结构关键分数 ROC（test set，AUC<0.5 自动反转） | `fig_roc_struct_key_scores.pdf` |
-| C07 | 结构 vs 生物特征 ROC 对比 | `fig_roc_struct_vs_bio.pdf` |
-| C08 | 三模型 AUPR（Precision-Recall） | `fig_aupr_test_3models.pdf` |
-| C09 | FDR=5% 时 Recall（1:1 抽样，均值曲线） | `fig_fdr5_recall_threshold.pdf` |
-| C11 | 多分数 × 多比例（1:1~1:128）Recall/FDR | `fig_fdr5_recall_ratio_*.pdf` |
-| C12 | 1:128 子集 FDR=5%/10% Recall 柱状图（带误差棒） | `fig_recall_fdr*_bars_*.pdf` |
-| C13 | 固定阈值法 1:128 子集 Recall 散点 | `fig_recall_fixedthr_*.pdf` |
-| C14 | RF all-feature vs structure-only 预测概率散点 | `fig_rf_all_vs_struct_scatter.pdf` |
-| C15 | 置换重要性（Gini + test AUC drop） | `fig_perm_{gini,aucdrop}_*.pdf` |
-| C16 | ARF6 案例：PAE/pLDDT、3D 结构、RF score vs ipTM/ipSAE | `fig_pae_plddt_structure.pdf` 等 |
+| 路径配置 + 全流程追踪（可选） | 自动指向仓库内 `data/analysis/`；追踪表需原始中间数据，缺失自动跳过 | 表格 |
+| 特征加载 + train/test 划分 | 6 来源特征合并、train/test 正负样本统计 | 表格 |
+| 所有特征 ROC | 高亮 Top3/Bottom3/ipTM | `fig_roc_all_features.pdf` |
+| 结构关键分数 ROC | test set，AUC<0.5 自动反转 | `fig_roc_struct_key_scores.pdf` |
+| 结构 vs 生物特征 ROC | 结构（蓝）vs 生物（红）对比 | `fig_roc_struct_vs_bio.pdf` |
+| 三模型 AUPR | Precision-Recall，all/struct/degree-match | `fig_aupr_test_3models.pdf` |
+| FDR=5% 时 Recall | 1:1 抽样，均值曲线求交 | `fig_fdr5_recall_threshold.pdf` |
+| 多分数 × 多比例 Recall/FDR | 1:1~1:128 子集 | `fig_fdr5_recall_ratio_*.pdf` |
+| 1:128 子集 Recall 柱状图 | FDR=5%/10%，带误差棒 | `fig_recall_fdr*_bars_*.pdf` |
+| 固定阈值法 Recall 散点 | 1:128 子集 × 100 次抽样 | `fig_recall_fixedthr_*.pdf` |
+| RF all vs struct 散点 | 两模型预测概率对比 | `fig_rf_all_vs_struct_scatter.pdf` |
+| 置换重要性 | Gini + test AUC drop | `fig_perm_{gini,aucdrop}_*.pdf` |
+| ARF6 案例 | PAE/pLDDT、3D 结构、RF score vs ipTM/ipSAE | `fig_pae_plddt_structure.pdf` 等 |
 
 **运行方式**：
 
