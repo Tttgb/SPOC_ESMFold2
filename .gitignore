@@ -1,0 +1,24 @@
+# ---- 大生物数据库（需自行下载，见 README“数据说明”）----
+data/spoc/
+
+# ---- 运行时自动生成的 AlphaMissense 缓存（约 132MB，可从 data/spoc 重建）----
+data/deeploc_output/cache_alphamissense.pkl
+
+# ---- 推理中间产物 / 输出 ----
+*_ad.npz
+batch_results.tsv
+*.log
+
+# ---- notebook 运行产物 ----
+figures/
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.conda/

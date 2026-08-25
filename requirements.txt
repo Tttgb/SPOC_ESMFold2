@@ -1,0 +1,12 @@
+numpy
+pandas
+scipy
+scikit-learn
+biopython
+h5py
+tqdm
+requests
+matplotlib
+seaborn
+py3Dmol
+ipykernel
