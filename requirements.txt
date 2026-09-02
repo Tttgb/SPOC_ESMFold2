@@ -1,7 +1,7 @@
 numpy
 pandas
 scipy
-scikit-learn
+scikit-learn>=1.6
 biopython
 h5py
 tqdm
