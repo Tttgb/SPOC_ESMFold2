@@ -163,9 +163,18 @@ jupyter notebook            # or open notebooks/visualization.ipynb in VS Code
 |---|---|
 | `data/models/` | Inference models: `rf_all_feat_model.pkl`, `rf_struct_feat_model.pkl` |
 | `data/fasta/` | `human_proteomes_reviewed.fasta` |
-| `data/deeploc_output/` | `cache_id_mapping.pkl`, `cache_deeploc.pkl` |
+| `data/deeploc_output/` | `cache_id_mapping.pkl`, `cache_deeploc.pkl` (DeepLoc 2.1 localisation cache, covers all 20.4k involved proteins — see note below) |
 | `data/analysis/` | Plotting data for the notebook (train/test, 3 RF models, permutation-importance CSVs, `domain_pairs_stats.csv` for Fig 1D, `param_sweep_aupr_results_*.csv` for the sweep figure) |
 | `test_input/`, `test_out.tsv` | Example inference input & output |
+
+> **Note on DeepLoc.** The `colocalization_match_score` biological feature uses
+> DeepLoc 2.1 subcellular localisation. DeepLoc is **not** a static data file —
+> it is a prediction tool (`deeploc2` CLI, run in the `esmfold2` conda env on
+> GPU). The pre-computed cache `data/deeploc_output/cache_deeploc.pkl` (shipped
+> above) already covers **all 20,416 involved proteins**, so inference reads the
+> cache and never needs to run DeepLoc. Only if you score a brand-new protein
+> (not in the cache) will the script invoke `deeploc2` on the fly (requires the
+> `esmfold2` conda environment with `deeploc2` installed and a GPU).
 
 ### Not shipped — `data/spoc/` (~11 GB raw, ~3.5 GB compressed)
 
