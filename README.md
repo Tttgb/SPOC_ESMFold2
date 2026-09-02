@@ -68,6 +68,29 @@ matplotlib seaborn py3Dmol ipykernel`
 > h5py/tqdm/requests`); `matplotlib/seaborn/py3Dmol/ipykernel` are for the
 > reproduction notebook.
 
+### Optional — DeepLoc 2.1 (only needed for brand-new proteins)
+
+`colocalization_match_score` uses **DeepLoc 2.1** subcellular localisation.
+DeepLoc 2.1 is a **standalone prediction tool** (not a PyPI package), so it is
+deliberately **not** listed in `requirements.txt`. The shipped cache
+`data/deeploc_output/cache_deeploc.pkl` already covers **all 20,416 proteins** in
+the datasets, so inference **never** calls DeepLoc in normal use.
+
+Only if you score a protein **absent from the cache** will `batch_inference.py`
+invoke `deeploc2` on the fly (see the DeepLoc note in the Data section). To
+enable that, install DeepLoc 2.1 (GPU + PyTorch required) in the `esmfold2`
+conda environment, per the official instructions:
+
+- https://services.healthtech.dtu.dk/services/DeepLoc-2.1/
+- Publication: Ødum *et al.*, *Nucleic Acids Research*, 2024, doi:10.1093/nar/gkae237
+
+```bash
+conda activate esmfold2            # batch_inference.py expects deeploc2 here
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install -e <path/to/deeploc2_package>   # from the official DeepLoc 2.1 distribution
+```
+
+
 ---
 
 ## 1. Model inference (`batch_inference.py`)
