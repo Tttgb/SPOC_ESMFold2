@@ -8,6 +8,10 @@ This script is the source of the notebook's *Supplementary Figure - RF
 hyperparameter sweep*. It saves the structured results (CSV) that the
 notebook reads to redraw the heatmaps, and also writes a 4-panel PDF per model.
 
+Feature counts (after iterative pruning, Gini < 0.01):
+    SPOC ESMFOLD          = 39 features (25 structural + 14 biological)
+    Structural classifier = 49 structural features
+
 Usage:
     python scripts/param_sweep_aupr_heatmap.py               # both models
     python scripts/param_sweep_aupr_heatmap.py --mode all    # only SPOC ESMFOLD

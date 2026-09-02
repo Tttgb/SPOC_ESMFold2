@@ -8,8 +8,8 @@ self-contained GitHub repository with a batch-inference script and a notebook
 that reproduces the paper's evaluation figures.
 
 - **Models**: Random Forest, three variants
-  - `SPOC ESMFOLD` (39 structural + 14 biological features)
-  - `Structural classifier` (49 structural features)
+  - `SPOC ESMFOLD` (39 features after iterative pruning: 25 structural + 14 biological)
+  - `Structural classifier` (49 structural features after iterative pruning)
   - `degree-match RF` (pure interaction-network degree features, used as a
     data-leakage check baseline)
 - **Inference**: `batch_inference.py` — scores a set of dimers (CIF/NPZ) and
@@ -99,8 +99,8 @@ python batch_inference.py --input_dir test_input --target_uniprot P62330 --outpu
 lacks `sample_atom_coords`/`input_asym_id`/…, the script auto-adapts it from the
 CIF into `<dimer_id>_ad.npz`.
 
-**Output columns**: `gene / uniprot_A / uniprot_B / target / fname / n_c+ /
-score_all_feat / score_struct_only` + 39 structural features (pLDDT, PAE,
+**Output columns** (78 total): `gene / uniprot_A / uniprot_B / target / fname /
+n_c+ / score_all_feat / score_struct_only` + 54 structural features (pLDDT, PAE,
 contacts, chemistry, pDockQ, ipTM, 19 ipSAE terms, …) + 14 biological features
 (BioGRID, co-expression, CRISPR, DepMap, ProtT5, AlphaMissense).
 
