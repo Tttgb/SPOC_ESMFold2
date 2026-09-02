@@ -46,6 +46,7 @@ classifier_package/
 │   └── spoc/                       # 11 GB biological DB (NOT shipped; see Data)
 ├── scripts/
 │   ├── check_spoc_db.py            # verify data/spoc completeness
+│   ├── download_spoc_db.sh         # download biological DBs from Zenodo
 │   └── param_sweep_aupr_heatmap.py # RF hyperparameter sweep (recomputes the CSVs)
 ├── test_input/                     # example inference input (3 dimers)
 └── test_out.tsv                    # example inference output (78-col feature table)
@@ -166,10 +167,19 @@ jupyter notebook            # or open notebooks/visualization.ipynb in VS Code
 | `data/analysis/` | Plotting data for the notebook (train/test, 3 RF models, permutation-importance CSVs, `domain_pairs_stats.csv` for Fig 1D, `param_sweep_aupr_results_*.csv` for the sweep figure) |
 | `test_input/`, `test_out.tsv` | Example inference input & output |
 
-### Not shipped — `data/spoc/` (~11 GB)
+### Not shipped — `data/spoc/` (~11 GB raw, ~3.5 GB compressed)
 
-The biological databases required for the biological features are **not**
-shipped (excluded via `.gitignore`). Download and place them as follows:
+The biological databases required for the biological features are **not** shipped
+(excluded via `.gitignore`). **Ready-to-use** archives are hosted on Zenodo
+(DOI: *to be added after upload*). Install them with a single command:
+
+```bash
+bash scripts/download_spoc_db.sh
+```
+
+This downloads the five archives (`AlphaMissence`, `biogrid`, `CoexpressDB`,
+`DepMap`, `ProtT5_embedding`), verifies their SHA256 checksums and extracts
+them into `data/spoc/`:
 
 ```
 data/spoc/
