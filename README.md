@@ -1,9 +1,11 @@
-# DDI-Classifier (packaged repo)
+# SPOC ESMFOLD
 
-A **domain–domain interaction (DDI) classifier** built on **ESMFold2 predicted
-structures + public biological databases**, shipped as a self-contained GitHub
-repository with a batch-inference script and a notebook that reproduces the
-paper's evaluation figures.
+*A False Positive Scoring Method for ESMFOLD2-fast Outputs.*
+
+A **domain–domain interaction (DDI) classifier / interaction scorer** built on
+**ESMFold2 predicted structures + public biological databases**, shipped as a
+self-contained GitHub repository with a batch-inference script and a notebook
+that reproduces the paper's evaluation figures.
 
 - **Models**: Random Forest, three variants
   - `SPOC ESMFOLD` (39 structural + 14 biological features)
