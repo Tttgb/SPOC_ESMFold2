@@ -40,7 +40,8 @@ classifier_package/
 │   ├── analysis/                   # plotting data for the notebook (shipped, self-contained)
 │   │   ├── test.tsv / train.tsv
 │   │   ├── rf_all_feat_model.pkl / rf_struct_feat_model.pkl / rf_degree_match_model.pkl
-│   │   ├── rf_permutation_importance_{allfeat,structfeat}.csv
+│   │   ├── rf_importance_{allfeat,structfeat}.csv          # Gini importance (feature, importance) → Fig 4
+│   │   ├── rf_permutation_importance_{allfeat,structfeat}.csv  # permutation drop (train/test)
 │   │   ├── domain_pairs_stats.csv  # pre-extracted data for Fig 1D
 │   │   └── param_sweep_aupr_results_{all,struct}.csv  # hyperparameter-sweep results
 │   └── spoc/                       # 11 GB biological DB (NOT shipped; see Data)
@@ -203,7 +204,7 @@ The Setup cell auto-points `DATA` to `data/analysis/` (override with
 | `data/models/` | Inference models: `rf_all_feat_model.pkl`, `rf_struct_feat_model.pkl` |
 | `data/fasta/` | `human_proteomes_reviewed.fasta` |
 | `data/deeploc_output/` | `cache_id_mapping.pkl`, `cache_deeploc.pkl` (DeepLoc 2.1 localisation cache, covers all 20.4k involved proteins — see note below) |
-| `data/analysis/` | Plotting data for the notebook (train/test, 3 RF models, permutation-importance CSVs, `domain_pairs_stats.csv` for Fig 1D, `param_sweep_aupr_results_*.csv` for the sweep figure) |
+| `data/analysis/` | Plotting data for the notebook (train/test, 3 RF models, Gini-importance CSVs for Fig 4, permutation-importance CSVs, `domain_pairs_stats.csv` for Fig 1D, `param_sweep_aupr_results_*.csv` for the sweep figure) |
 | `test_input/`, `test_out.tsv` | Example inference input & output |
 
 > **Note on DeepLoc.** The `colocalization_match_score` biological feature uses
