@@ -14,8 +14,8 @@
 # ============================================================
 set -euo pipefail
 
-# ---- Zenodo record (replace XXXXXXX with the real record ID after upload) ----
-ZENODO_RECORD="${ZENODO_RECORD:-https://zenodo.org/records/XXXXXXX/files}"
+# ---- Zenodo record containing the SPOC database archives ----
+ZENODO_RECORD="${ZENODO_RECORD:-https://zenodo.org/records/22244498/files}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPOC_DIR="$REPO_DIR/data/spoc"

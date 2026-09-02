@@ -219,7 +219,8 @@ The Setup cell auto-points `DATA` to `data/analysis/` (override with
 
 The biological databases required for the biological features are **not** shipped
 (excluded via `.gitignore`). **Ready-to-use** archives are hosted on Zenodo
-(DOI: *to be added after upload*). Install them with a single command:
+([record 22244498](https://zenodo.org/records/22244498); a DOI is assigned after
+publication of the record). Install them with a single command:
 
 ```bash
 bash scripts/download_spoc_db.sh
