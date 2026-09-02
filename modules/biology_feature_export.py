@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-生物学特征导出：附加到已有的 5 个结构特征 TSV 后面（新增 14 列）。
-特征列表:
+Biological-feature export: append 14 biological columns to the existing
+5 structural-feature TSVs.
+Feature list:
   biogrid_detect_count, co_expression_score, colocalization_match_score,
   crispr_jaccard, crispr_shared_hit_count,
   depmap_abs_diff, depmap_cosine_dist, depmap_euclidian_dist,
@@ -28,10 +29,10 @@ NPZ_DIR = os.path.join(BASE, 'output_domain')
 
 SOURCES = ['random', 'PDB_decoy', 'XL_MS', 'PDB_contact', 'XL_MS_random']
 
-DIST_CONTACT = 5.0  # 界面判定距离
+DIST_CONTACT = 5.0  # interface criterion distance
 
 # ============================================================
-# 1. ID 映射 (UniProt → Symbol / Entrez)
+# 1. ID mapping (UniProt -> Symbol / Entrez)
 # ============================================================
 UNIPROT_RE = re.compile(r'^[A-Z][0-9][A-Z0-9]{3}[0-9]([0-9]{2})?$')
 
@@ -44,7 +45,7 @@ def detect_id_type(q):
 
 
 def build_id_mapping(uniprot_ids, cache_path):
-    """通过 MyGene API 批量映射 UniProt → Symbol/Entrez, 缓存结果"""
+    """Batch-map UniProt -> Symbol/Entrez via the MyGene API; cache the result"""
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
             return pickle.load(f)
@@ -83,7 +84,7 @@ def build_id_mapping(uniprot_ids, cache_path):
 # 2. BioGRID detect_count
 # ============================================================
 def load_biogrid(biogrid_path, id_mapping):
-    """返回 {(uniprot_a, uniprot_b): detect_count} (alphabetically sorted)"""
+    """Returns {(uniprot_a, uniprot_b): detect_count} (alphabetically sorted)"""
     print("Loading BioGRID ...")
     counts = {}
     with open(biogrid_path) as f:
@@ -94,12 +95,12 @@ def load_biogrid(biogrid_path, id_mapping):
             if len(cols) < 28: continue
             org_a, org_b = cols[15], cols[16]
             if org_a != '9606' or org_b != '9606':
-                continue  # 只取 human
+                continue  # keep human only
             up_a = cols[23].strip()  # SWISS-PROT Accessions
             up_b = cols[26].strip()
             if not up_a or not up_b or up_a == '-' or up_b == '-':
                 continue
-            # BIOGRID 中 Swiss-Prot 字段可能包含多个 ID，取第一个
+            # the Swiss-Prot field in BioGRID may contain multiple IDs; take the first
             up_a = up_a.split('|')[0]
             up_b = up_b.split('|')[0]
             key = tuple(sorted([up_a, up_b]))
@@ -112,7 +113,7 @@ def load_biogrid(biogrid_path, id_mapping):
 # 3. CoexpressDB co_expression_score
 # ============================================================
 def load_coexpressdb(coexpr_dir, id_mapping):
-    """返回 {entrez_gene_id: coexpression_score} — 每个基因一个整体共表达分数"""
+    """Returns {entrez_gene_id: coexpression_score} - one overall co-expression score per gene"""
     print("Loading CoexpressDB (human) ...")
     import zipfile
     path = os.path.join(coexpr_dir,
@@ -144,13 +145,13 @@ DEEPLOC_LOC_COLS = [
 
 
 def run_deeploc(uniprot_ids, fasta_path, cache_path):
-    """运行 DeepLoc2, 返回 {uniprot_id: np.array(14,)}
-       如果缓存存在则直接读取"""
+    """Run DeepLoc2 and return {uniprot_id: np.array(14,)}.
+       Reads from cache if it exists."""
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
             return pickle.load(f)
 
-    # 从 FASTA 提取序列
+    # extract sequences from FASTA
     print("Extracting sequences for DeepLoc ...")
     seq_map = {}
     uid, seq = None, []
@@ -170,13 +171,13 @@ def run_deeploc(uniprot_ids, fasta_path, cache_path):
 
     print(f"  Found {len(seq_map)}/{len(uniprot_ids)} sequences in FASTA")
 
-    # 写临时 FASTA
+    # write a temporary FASTA
     tmp_fasta = os.path.join(CACHE_DIR, 'deeploc_input.fasta')
     with open(tmp_fasta, 'w') as f:
         for uid, seq_str in seq_map.items():
             f.write(f'>{uid}\n{seq_str}\n')
 
-    # 运行 DeepLoc2 (使用已安装的 CLI)
+    # run DeepLoc2 (uses the installed CLI)
     out_dir = CACHE_DIR
     os.makedirs(out_dir, exist_ok=True)
     print("Running DeepLoc 2.1 (Fast model) ...")
@@ -188,17 +189,17 @@ def run_deeploc(uniprot_ids, fasta_path, cache_path):
         '-o', out_dir,
     ], check=True, env={**os.environ, 'TORCH_HOME': '/tmp/torch_cache'})
 
-    # 解析输出
+    # parse the output
     csv_files = [f for f in os.listdir(out_dir) if f.endswith('.csv')]
     if not csv_files:
         raise FileNotFoundError(f"No CSV output found in {out_dir}")
     result_df = pd.read_csv(os.path.join(out_dir, csv_files[-1]))
 
-    # 构建 {uniprot_id: vector} 字典
+    # build the {uniprot_id: vector} dict
     loc_data = {}
     for _, row in result_df.iterrows():
-        protein_id = row.iloc[0]  # 第一列: Protein_ID / ACC
-        # 尝试多种 ID 格式
+        protein_id = row.iloc[0]  # first column: Protein_ID / ACC
+        # try several ID formats
         uid_match = protein_id
         if '|' in str(protein_id):
             uid_match = str(protein_id).split('|')[1]
@@ -215,7 +216,7 @@ def run_deeploc(uniprot_ids, fasta_path, cache_path):
 # 5. CRISPR ORCS
 # ============================================================
 def load_crispr_orcs(pkl_path):
-    """返回 {gene_symbol: set(screen_ids)}"""
+    """Returns {gene_symbol: set(screen_ids)}"""
     print("Loading CRISPR ORCS ...")
     with open(pkl_path, 'rb') as f:
         data = pickle.load(f)
@@ -226,25 +227,25 @@ def load_crispr_orcs(pkl_path):
 
 
 # ============================================================
-# 6. ProtT5 Embeddings (pre-computed, domain 继承全长蛋白)
+# 6. ProtT5 Embeddings (pre-computed; domains inherit the full-length protein)
 # ============================================================
 def load_t5_embeddings(h5_path):
-    """返回 {uniprot_id: np.array(1024, float16)} 仅加载需要的 ID"""
+    """Return {uniprot_id: np.array(1024, float16)}; only needed IDs are read later"""
     print("Loading ProtT5 embeddings ...")
     f = h5py.File(h5_path, 'r')
-    # 返回打开的 file handle + lazy access
+    # return the open file handle for lazy access
     print(f"  {len(f.keys())} proteins available")
-    return f  # 返回 h5py File, 后续按需读取
+    return f  # h5py File; read on demand later
 
 
 # ============================================================
 # 7. DepMap
 # ============================================================
 def load_depmap(csv_path):
-    """返回 {gene_symbol: np.array([N_cell_lines])}"""
+    """Returns {gene_symbol: np.array([N_cell_lines])}"""
     print("Loading DepMap ...")
     df = pd.read_csv(csv_path, index_col=0)
-    # 列名格式: "TP53 (7157)" → 提取 symbol
+    # column format: "TP53 (7157)" -> extract symbol
     gene_vectors = {}
     for col in df.columns:
         symbol = col.split(' (')[0] if ' (' in col else col
@@ -257,7 +258,7 @@ def load_depmap(csv_path):
 # 8. AlphaMissense
 # ============================================================
 def load_alphamissense(am_path, target_ids, cache_path):
-    """返回 {uniprot_id: {position: avg_am_score}}, 仅保留 target_ids, 结果缓存"""
+    """Returns {uniprot_id: {position: avg_am_score}} keeping only target_ids; caches the result"""
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
             return pickle.load(f)
@@ -274,7 +275,7 @@ def load_alphamissense(am_path, target_ids, cache_path):
             if len(cols) < 4: continue
             uid = cols[0]
             if uid not in target_set:
-                continue  # 跳过不需要的蛋白
+                continue  # skip proteins we don't need
             variant, score = cols[1], float(cols[2])
             m = variant_re.match(variant)
             if not m: continue
@@ -293,11 +294,11 @@ def load_alphamissense(am_path, target_ids, cache_path):
 
 
 # ============================================================
-# 9. 界面残基检测 (from NPZ)
+# 9. Interface residue detection (from NPZ)
 # ============================================================
 def get_interface_residues(npz_path):
-    """返回 (set of res_ids_a, set of res_ids_b, n_residues_a) 或 None
-       res_ids 为全局残基索引 (0-based, A链在前)"""
+    """Returns (set of res_ids_a, set of res_ids_b, n_residues_a) or None.
+       res_ids are global residue indices (0-based, chain A first)."""
     try:
         d = np.load(npz_path, allow_pickle=False)
         asym_id = d['input_asym_id'].flatten()
@@ -329,16 +330,16 @@ def get_interface_residues(npz_path):
 
 
 # ============================================================
-# 10. 特征计算主函数
+# 10. Main feature-computation function
 # ============================================================
 def compute_biology_features(row, biogrid, coexpr, crispr, depmap,
                               am_data, deeploc_data, t5_file, id_map, npz_dir,
                               npz_path=None):
-    """如果传了 npz_path 则直接使用（batch inference），否则从 npz_dir + dimer_id 构造"""
+    """If npz_path is given, use it directly (batch inference); otherwise build it from npz_dir + dimer_id"""
     ua, ub = row['uniprot_A'], row['uniprot_B']
     result = {}
 
-    # ── ID 映射 ──
+    # ── ID mapping ──
     ma, mb = id_map.get(ua, {}), id_map.get(ub, {})
     sym_a, sym_b = ma.get('symbol', ''), mb.get('symbol', '')
     ent_a, ent_b = ma.get('entrezgene', ''), mb.get('entrezgene', '')
@@ -393,7 +394,7 @@ def compute_biology_features(row, biogrid, coexpr, crispr, depmap,
         result['depmap_cosine_dist'] = np.nan
         result['depmap_euclidian_dist'] = np.nan
 
-    # ── ProtT5 embedding distances (domain 继承全长蛋白) ──
+    # ── ProtT5 embedding distances (domains inherit the full-length protein) ──
     try:
         emb_a = np.array(t5_file[ua][()], dtype=np.float32) if ua in t5_file else None
         emb_b = np.array(t5_file[ub][()], dtype=np.float32) if ub in t5_file else None
@@ -422,7 +423,7 @@ def compute_biology_features(row, biogrid, coexpr, crispr, depmap,
     result['avg_af_missense_score_diff'] = (
         abs(mean_a - mean_b) if not np.isnan(mean_a) and not np.isnan(mean_b) else np.nan)
 
-    # AlphaMissense 界面特征
+    # AlphaMissense interface features
     if npz_path is None:
         dimer_id = row.get('dimer_id', '')
         if not dimer_id:
@@ -432,9 +433,9 @@ def compute_biology_features(row, biogrid, coexpr, crispr, depmap,
 
     if iface_info and (iface_info[0] or iface_info[1]):
         iface_a, iface_b, n_res_a = iface_info
-        # 全局残基索引 → UniProt 位置
-        # A链: res 0..(n_res_a-1) → dom_A_start..dom_A_end
-        # B链: res n_res_a..(n_res_a+n_res_b-1) → dom_B_start..dom_B_end
+        # global residue index -> UniProt position
+        # chain A: res 0..(n_res_a-1) -> dom_A_start..dom_A_end
+        # chain B: res n_res_a..(n_res_a+n_res_b-1) -> dom_B_start..dom_B_end
         pair_means = []
         pair_diffs = []
         sig_count = 0
@@ -466,10 +467,10 @@ def compute_biology_features(row, biogrid, coexpr, crispr, depmap,
 
 
 # ============================================================
-# 11. 主入口
+# 11. Main entry
 # ============================================================
 def main():
-    # ── 收集所有 UniProt ID ──
+    # ── collect all UniProt IDs ──
     all_up_ids = set()
     for src in SOURCES:
         tsv = os.path.join(FEAT_DIR, src, f'{src}_features.tsv')
@@ -479,7 +480,7 @@ def main():
         all_up_ids.update(df['uniprot_B'].dropna().unique())
     print(f"Unique UniProt IDs: {len(all_up_ids)}")
 
-    # ── 加载数据库 ──
+    # ── load databases ──
     id_map = build_id_mapping(all_up_ids,
         os.path.join(CACHE_DIR, 'cache_id_mapping.pkl'))
 
@@ -508,7 +509,7 @@ def main():
     t5_file = load_t5_embeddings(
         os.path.join(SPOC_DIR, 'ProtT5_embedding/per-protein.h5'))
 
-    # ── 逐 source 处理 ──
+    # ── process each source ──
     for src in SOURCES:
         tsv_in = os.path.join(FEAT_DIR, src, f'{src}_features.tsv')
         if not os.path.exists(tsv_in):

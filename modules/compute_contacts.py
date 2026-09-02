@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-从 ESMFold2 预测结果 (.npz) 计算 inter-chain contact positive (C+) 指标。
+Compute inter-chain contact-positive (C+) metrics from ESMFold2 predictions (.npz).
 
-C+ 标准 (PMID 文献):
-  1. 至少 1 对 inter-chain 重原子距离 < 5 Å
-  2. 两残基 pLDDT 均 > 0.5
-  3. 不存在任何重原子对距离 < 1 Å（clash 过滤）
-  4. PAE(x,y) < 15 且 PAE(y,x) < 15
+C+ criteria (PMID reference):
+  1. at least 1 inter-chain heavy-atom pair with distance < 5 Å
+  2. both residues have pLDDT > 0.5
+  3. no heavy-atom pair with distance < 1 Å (clash filter)
+  4. PAE(x,y) < 15 and PAE(y,x) < 15
 
-输出:
+Outputs:
   - contact_positive_results.pkl: dict[dimer_id] = {n_positive_contacts, plddt_A, plddt_B, iptm, ...}
   - contact_positive_results.tsv: label\tsource\tcomplex_name\tiptm\tplddt_A\tplddt_B\tn_c+
 """
@@ -27,7 +27,7 @@ DIST_CLASH = 1.0
 
 
 def compute_contacts(npz_path: str) -> dict | None:
-    """从 npz 文件计算 C+ 指标。返回 dict 或 None。"""
+    """Compute C+ metrics from an npz file. Returns a dict or None."""
     try:
         d = np.load(npz_path, allow_pickle=False)
     except Exception:
@@ -40,7 +40,7 @@ def compute_contacts(npz_path: str) -> dict | None:
     atom2res = d['input_atom_to_token'][0]           # [N_atoms]
     coords = d['sample_atom_coords']                 # [N_atoms, 3]
 
-    # ── 按链分组原子 ──
+    # ── group atoms by chain ──
     a_mask = asym_id[atom2res] == 0
     b_mask = asym_id[atom2res] == 1
     if not a_mask.any() or not b_mask.any():
@@ -51,12 +51,12 @@ def compute_contacts(npz_path: str) -> dict | None:
     res_A = atom2res[a_mask].astype(int)
     res_B = atom2res[b_mask].astype(int)
 
-    # ── KDTree 查找所有 5 Å 以内的跨链原子对 ──
+    # ── KDTree: find all inter-chain atom pairs within 5 Å ──
     tree_A = cKDTree(coords_A)
     pairs = tree_A.query_ball_tree(cKDTree(coords_B), r=DIST_CONTACT)
     # pairs[a_idx] = list of b_idx within distance r
 
-    # ── 聚合到残基对 ──
+    # ── aggregate to residue pairs ──
     res_pair_dist = {}  # (ri, rj) → min_dist
     res_pair_clash = set()
 
@@ -73,11 +73,11 @@ def compute_contacts(npz_path: str) -> dict | None:
             if dist < DIST_CLASH:
                 res_pair_clash.add(key)
 
-    # ── 筛选 C+ ──
+    # ── filter C+ pairs ──
     c_plus = 0
     c_clash = 0 
     for (ri, rj), _ in res_pair_dist.items():
-        # clash 过滤
+        # clash filter
         if (ri, rj) in res_pair_clash:
             c_clash +=1
             continue
@@ -92,7 +92,7 @@ def compute_contacts(npz_path: str) -> dict | None:
 
         c_plus += 1
 
-    # ── 链 pLDDT ──
+    # ── chain pLDDT ──
     plddt_A = float(plddt[asym_id == 0].mean())
     plddt_B = float(plddt[asym_id == 1].mean())
 
@@ -125,20 +125,20 @@ def main():
     out_dir = os.path.join(data_dir, 'contact_positive')
     os.makedirs(out_dir, exist_ok=True)
 
-    # ── 加载 PKL ──
-    print("加载 domain_pairs.pkl ...")
+    # ── load PKL ──
+    print("Loading domain_pairs.pkl ...")
     with open(pkl_path, 'rb') as f:
         raw_pairs = pickle.load(f)
-    print(f"  共 {len(raw_pairs)} 条记录")
+    print(f"  {len(raw_pairs)} records")
 
-    # ── 构建 dimer_id 列表 ──
+    # ── build dimer_id list ──
     dimer_ids = []
     for entry in raw_pairs:
         dimer_id = (f"{entry['uniprot_A']}_{entry['dom_A_start']}_{entry['dom_A_end']}__"
                     f"{entry['uniprot_B']}_{entry['dom_B_start']}_{entry['dom_B_end']}")
         dimer_ids.append(dimer_id)
 
-    # unique dimer 映射
+    # unique dimer mapping
     unique_ids, first_idx = [], {}
     for i, did in enumerate(dimer_ids):
         if did not in first_idx:
@@ -147,9 +147,9 @@ def main():
 
     print(f"  unique dimer: {len(unique_ids)}")
 
-    # ── 并行计算 ──
+    # ── parallel computation ──
     n_workers = min(cpu_count(), 32)
-    print(f"  使用 {n_workers} 个 worker 并行计算 ...")
+    print(f"  Using {n_workers} workers ...")
 
     results = {}
     n_contact_pos = 0
@@ -166,12 +166,12 @@ def main():
             if metrics['is_contact_positive']:
                 n_contact_pos += 1
 
-    # ── 保存 pkl ──
+    # ── save pkl ──
     pkl_out = os.path.join(out_dir, 'contact_positive_results.pkl')
     with open(pkl_out, 'wb') as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # ── 输出 TSV ──
+    # ── write TSV ──
     tsv_out = os.path.join(out_dir, 'contact_positive_results.tsv')
     with open(tsv_out, 'w') as f:
         f.write("label\tsource\tcomplex_name\tiptm\tplddt_A\tplddt_B\t"
@@ -190,12 +190,12 @@ def main():
                     )
                     
 
-    # ── 摘要 ──
+    # ── summary ──
     elapsed = time.time() - t0
     n_ok = len(results)
     n_total = len(unique_ids)
     print(f"\n{'='*50}")
-    print(f"  完成: {elapsed:.1f}s")
+    print(f"  Done in {elapsed:.1f}s")
     print(f"  Computed: {n_ok}/{n_total}")
     print(f"  Contact positive (C+ >= 5): {n_contact_pos} "
           f"({100*n_contact_pos/n_total:.1f}%)")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-从 ESMFold2 预测的 .npz + .cif 文件中提取结构特征。
-CIF 用于: pDockQ CB 坐标 + atom 级别化学特征 (atom name 直接读取)
-NPZ 用于: pLDDT, PAE, coords (全原子), residue types
+Extract structural features from ESMFold2-predicted .npz + .cif files.
+CIF is used for: pDockQ CB coordinates + atom-level chemical features (atom names read directly)
+NPZ is used for: pLDDT, PAE, coords (all atoms), residue types
 """
 
 import os
@@ -21,10 +21,10 @@ FASTA_PATH = os.path.join(BASE, 'dataset/random_pair/human_proteomes_reviewed.fa
 
 SOURCES = ['random', 'PDB_decoy', 'XL_MS', 'PDB_contact', 'XL_MS_random']
 
-DIST_CONTACT = 5.0   # 整体 contact 判定
+DIST_CONTACT = 5.0   # general contact criterion
 DIST_CLASH = 1.0
 DIST_HBOND = 3.0
-DIST_PDOCKQ = 8.0    # pDockQ 专用
+DIST_PDOCKQ = 8.0    # pDockQ-specific
 
 # AA charge: 0=neutral, 1=positive, -1=negative
 AA3_CHARGE = {
@@ -51,18 +51,18 @@ def load_full_lengths(fasta_path):
 
 
 def read_cif(cif_path):
-    """返回 {chain: {coords:[N,3], elements:[N], names:[N], res_types:[N], res_id:[N]}}
-    
-    兼容 ESMFold2 输出（缺失 _atom_site.occupancy 等字段）。
+    """Returns {chain: {coords:[N,3], elements:[N], names:[N], res_types:[N], res_id:[N]}}
+
+    Compatible with ESMFold2 outputs (which lack _atom_site.occupancy, etc.).
     """
-    # 先尝试标准 MMCIFParser
+    # try the standard MMCIFParser first
     parser = MMCIFParser(QUIET=True)
     try:
         structure = parser.get_structure('x', cif_path)
         return _parse_structure(structure)
     except Exception:
         pass
-    # 回退：用 MMCIF2Dict 手动解析（兼容缺失字段）
+    # fallback: parse manually with MMCIF2Dict (tolerates missing fields)
     try:
         from Bio.PDB.MMCIF2Dict import MMCIF2Dict
         mmcif_dict = MMCIF2Dict(cif_path)
@@ -72,7 +72,7 @@ def read_cif(cif_path):
 
 
 def _parse_structure(structure):
-    """用 Biopython Structure 对象解析"""
+    """Parse using a Biopython Structure object"""
     info = {}
     global_rid = 0
     for chain in structure[0]:
@@ -99,10 +99,10 @@ def _parse_structure(structure):
 
 
 def _parse_mmcif_dict(mmcif_dict):
-    """从 MMCIF2Dict 原始字典解析（兼容 ESMFold2 输出的不完整 CIF）"""
+    """Parse from a raw MMCIF2Dict (handles incomplete ESMFold2 CIFs)"""
     info = {}
 
-    # 检查必需字段
+    # check required fields
     for key in ['_atom_site.Cartn_x', '_atom_site.Cartn_y', '_atom_site.Cartn_z',
                 '_atom_site.label_asym_id', '_atom_site.label_comp_id',
                 '_atom_site.label_atom_id', '_atom_site.type_symbol']:
@@ -119,14 +119,14 @@ def _parse_mmcif_dict(mmcif_dict):
     atom_names = np.array(mmcif_dict['_atom_site.label_atom_id'], dtype='<U4')
     elements = np.array(mmcif_dict['_atom_site.type_symbol'], dtype='<U2')
 
-    # 解析 residue ID（可能有 _atom_site.label_seq_id）
+    # parse residue IDs (may have _atom_site.label_seq_id)
     if '_atom_site.label_seq_id' in mmcif_dict:
         raw_seq_ids = mmcif_dict['_atom_site.label_seq_id']
         seq_ids = np.array([int(s) if s != '.' else -1 for s in raw_seq_ids], dtype=np.int32)
     else:
         seq_ids = np.arange(len(chains), dtype=np.int32)
 
-    # 按 chain 分组
+    # group by chain
     unique_chains = np.unique(chains)
     global_rid = 0
     for ch_id in unique_chains:
@@ -137,7 +137,7 @@ def _parse_mmcif_dict(mmcif_dict):
         chain_res_types = res_types[mask]
         chain_seq_ids = seq_ids[mask]
 
-        # 分配全局 rid（按 unique seq_id 递增）
+        # assign global rid (incrementing over unique seq_ids)
         unique_seq = np.unique(chain_seq_ids)
         rid_map = {s: i + global_rid for i, s in enumerate(unique_seq)}
         rid_per_atom = np.array([rid_map[s] for s in chain_seq_ids.tolist()], dtype=np.int32)
@@ -155,7 +155,7 @@ def _parse_mmcif_dict(mmcif_dict):
 
 
 def get_cb_mask(info, chain_id):
-    """CB (GLY用CA) 的 bool mask (pDockQ v1)"""
+    """Boolean mask of CB atoms (CA for GLY) - pDockQ v1"""
     atom_names = info[chain_id]['names']
     res_types = info[chain_id]['res_types']
     return np.array([(name == 'CB' or (rt == 'GLY' and name == 'CA'))
@@ -189,8 +189,8 @@ def compute_pdockq(info, plddt):
 
 
 def compute_pdockq_v2(info, plddt, pae):
-    """pDockQ v2 — 对齐 ipsae_esmfold2.py 参考实现:
-       CB 距离 (GLY→CA), 仅对接触对的 PAE 做 d0=10 归一化, 取双向 max"""
+    """pDockQ v2 - aligned with the ipsae_esmfold2.py reference:
+       CB distances (GLY->CA), PAE of contact pairs normalized at d0=10, take the max over both directions"""
     chain_ids = list(info.keys())
     if len(chain_ids) < 2:
         return 0.0
@@ -231,22 +231,22 @@ def compute_pdockq_v2(info, plddt, pae):
 
 
 # ══════════════════════════════════════════════════════════════
-# ipSAE — 参考 参考脚本/ipsae_esmfold2.py (biorxiv 2025.02.10.637595)
-# 对二聚体 (A/B 两链), 基于界面 PAE 子集 (pae < pae_cutoff) 计算 TM-score 式分数
-#   ipsae_d0res / d0chn / d0dom (asym + max 双向)
+# ipSAE - reference: scripts/ipsae_esmfold2.py (biorxiv 2025.02.10.637595)
+# For a dimer (chains A/B), compute TM-score-style scores from the interface
+# PAE subset (pae < pae_cutoff); ipsae_d0res / d0chn / d0dom (asym + max of both directions)
 # ══════════════════════════════════════════════════════════════
 def _ipsae_calc_d0(L):
-    """calc_d0 (支持 array)。L 为参与残基数"""
+    """calc_d0 (array-friendly). L = number of residues involved"""
     L = np.maximum(np.asarray(L, dtype=np.float64), 26.0)
     d0 = 1.24 * (L - 15.0) ** (1.0 / 3.0) - 1.8
     return np.maximum(1.0, d0)
 
 
 def compute_ipsae(pae, asym_id, pae_cutoff=10.0, dist_cutoff=15.0):
-    """计算 ipSAE 及参考脚本 ipsae_esmfold2.py 的全部界面指标 (A/B 两链)。
-    覆盖: ipsae_d0res/d0chn/d0dom (asym+max), iptm_d0chn, LIS,
-          n0res/n0dom/n0chn, d0res/d0dom/d0chn, 界面残基数.
-    返回 dict 或 None。"""
+    """Compute ipSAE and all interface metrics from the ipsae_esmfold2.py reference (chains A/B).
+    Covers: ipsae_d0res/d0chn/d0dom (asym+max), iptm_d0chn, LIS,
+            n0res/n0dom/n0chn, d0res/d0dom/d0chn, interface residue counts.
+    Returns a dict or None."""
     mask_a = asym_id == 0
     mask_b = asym_id == 1
     ia = np.where(mask_a)[0]
@@ -264,45 +264,45 @@ def compute_ipsae(pae, asym_id, pae_cutoff=10.0, dist_cutoff=15.0):
     def _one_direction(pae_dir):
         n1, n2 = pae_dir.shape
         valid = pae_dir < pae_cutoff
-        # d0chn: 基于两链总残基数
+        # d0chn: based on the total residue count of both chains
         d0chn = float(_ipsae_calc_d0(n1 + n2))
         ptm_all = 1.0 / (1.0 + (pae_dir / d0chn) ** 2)
-        # ipTM_d0chn: 对所有 B 残基取均值 (非界面)
+        # ipTM_d0chn: mean over all B residues (not just the interface)
         r_iptm = _per_res_mean(ptm_all, np.ones_like(valid, dtype=bool))
         iptm_d0chn_asym = float(np.max(r_iptm)) if n1 else 0.0
-        # ipsae_d0chn: 仅界面
+        # ipsae_d0chn: interface only
         r_chn = _per_res_mean(ptm_all, valid)
         ipsae_d0chn_asym = float(np.max(r_chn)) if n1 else 0.0
-        # d0dom: 基于界面唯一残基数
+        # d0dom: based on the number of unique interface residues
         n0dom = int(valid.any(axis=1).sum()) + int(valid.any(axis=0).sum())
         d0dom = float(_ipsae_calc_d0(n0dom))
         ptm_dom = 1.0 / (1.0 + (pae_dir / d0dom) ** 2)
         r_dom = _per_res_mean(ptm_dom, valid)
         ipsae_d0dom_asym = float(np.max(r_dom)) if n1 else 0.0
-        # d0res: 每残基界面数
+        # d0res: interface counts per residue
         n0res_rows = valid.sum(axis=1)
         d0res_rows = _ipsae_calc_d0(n0res_rows)[:, None]
         ptm_res = 1.0 / (1.0 + (pae_dir / d0res_rows) ** 2)
         r_res = _per_res_mean(ptm_res, valid)
         ipsae_d0res_asym = float(np.max(r_res)) if n1 else 0.0
-        # n0res / d0res 在 ipsae_d0res 最大残基处 (对齐参考脚本)
+        # n0res/d0res taken at the residue of max ipsae_d0res (aligned with the reference)
         if n1 and r_res.max() > 0:
             mi = int(np.argmax(r_res))
             n0res_asym = int(n0res_rows[mi])
             d0res_asym = float(d0res_rows[mi, 0])
         else:
             n0res_asym, d0res_asym = 0, 0.0
-        # 界面残基数 (nres1/nres2)
+        # interface residue counts (nres1/nres2)
         nres_a = int(valid.any(axis=1).sum())
         nres_b = int(valid.any(axis=0).sum())
         return (iptm_d0chn_asym, ipsae_d0chn_asym, ipsae_d0dom_asym,
                 ipsae_d0res_asym, n0res_asym, d0res_asym, nres_a, nres_b)
 
-    pae_ba = pae[np.ix_(ib, ia)]  # B→A 方向 (PAE 不对称, 不能简单用 pae_ab.T)
-    a = _one_direction(pae_ab)      # A→B: pae[A行, B列]
-    b = _one_direction(pae_ba)      # B→A: pae[B行, A列]
+    pae_ba = pae[np.ix_(ib, ia)]  # B->A direction (PAE is asymmetric; can't just use pae_ab.T)
+    a = _one_direction(pae_ab)      # A->B: pae[A rows, B cols]
+    b = _one_direction(pae_ba)      # B->A: pae[B rows, A cols]
 
-    # LIS: 跨链 PAE<12 的 (12-PAE)/12 均值 (双向平均)
+    # LIS: mean of (12-PAE)/12 over inter-chain PAE<12 (average of both directions)
     sel_ab = pae_ab[pae_ab < 12.0]
     sel_ba = pae_ba[pae_ba < 12.0]
     lis_ab = float(np.mean((12.0 - sel_ab) / 12.0)) if sel_ab.size else 0.0
@@ -346,8 +346,8 @@ def compute_features(npz_path, cif_path, full_lengths, row):
     ptm = float(npz_data.get('ptm', 0.0))
     N_res = len(plddt)
 
-    mask_chain_a = asym_id == 0 #残基级别，是否属于链A
-    mask_chain_b = asym_id == 1 #残基级别，是否属于链B
+    mask_chain_a = asym_id == 0  # residue-level: belongs to chain A
+    mask_chain_b = asym_id == 1  # residue-level: belongs to chain B
     if not mask_chain_a.any() or not mask_chain_b.any():
         return None
 
@@ -373,12 +373,12 @@ def compute_features(npz_path, cif_path, full_lengths, row):
     pdockq_e_v2 = compute_pdockq_v2(cif, plddt, pae)
 
     # ── inter-chain atom contacts (from NPZ) ──
-    atom_mask_a = mask_chain_a[atom_to_res].astype(bool) #原子级别，是否属于链A
-    atom_mask_b = mask_chain_b[atom_to_res].astype(bool) #原子级别，是否属于链B
+    atom_mask_a = mask_chain_a[atom_to_res].astype(bool)  # atom-level: belongs to chain A
+    atom_mask_b = mask_chain_b[atom_to_res].astype(bool)  # atom-level: belongs to chain B
     if not atom_mask_a.any() or not atom_mask_b.any():
         return None
 
-    # ── CIF/NPZ 坐标一致性 ──
+    # ── CIF/NPZ coordinate consistency ──
     cif_coords_a = cif[chain_A]['coords']; cif_coords_b = cif[chain_B]['coords']
     npz_coords_a = coords_npz[atom_mask_a]; npz_coords_b = coords_npz[atom_mask_b]
     n_check = min(5, len(cif_coords_a), len(npz_coords_a), len(cif_coords_b), len(npz_coords_b))
@@ -388,13 +388,13 @@ def compute_features(npz_path, cif_path, full_lengths, row):
         if diff_a > 1e-3 or diff_b > 1e-3:
             raise RuntimeError(f'CIF/NPZ mismatch: {npz_path} dA={diff_a:.6f} dB={diff_b:.6f}')
 
-    coords_a = coords_npz[atom_mask_a] #A链的全部原子坐标
-    coords_b = coords_npz[atom_mask_b] #B链的全部原子坐标
-    res_idx_a = atom_to_res[atom_mask_a] #A链的全部atom→残基映射
-    res_idx_b = atom_to_res[atom_mask_b] #B链的全部atom→残基映射
+    coords_a = coords_npz[atom_mask_a]  # all atoms of chain A
+    coords_b = coords_npz[atom_mask_b]  # all atoms of chain B
+    res_idx_a = atom_to_res[atom_mask_a]  # atom->residue map for chain A
+    res_idx_b = atom_to_res[atom_mask_b]  # atom->residue map for chain B
 
     tree = cKDTree(coords_a)
-    pairs_list = tree.query_ball_tree(cKDTree(coords_b), r=DIST_CONTACT) #找AB链的所有原子对，距离≤5Å
+    pairs_list = tree.query_ball_tree(cKDTree(coords_b), r=DIST_CONTACT)  # all A-B atom pairs within 5 Å
 
     res_pair_data = {}
     for atom_idx_a, neighbors in enumerate(pairs_list):
@@ -403,13 +403,13 @@ def compute_features(npz_path, cif_path, full_lengths, row):
             res_j = res_idx_b[atom_idx_b]
             key = (int(res_i), int(res_j))
             if key not in res_pair_data:
-                res_pair_data[key] = {'dists': [], 'atom_pairs': []} #第一对dists用来表征res-res pair
-            res_pair_data[key]['atom_pairs'].append((atom_idx_a, atom_idx_b)) #统计同一对res-res pair有多少atom pair
+                res_pair_data[key] = {'dists': [], 'atom_pairs': []}  # dists[0] characterizes the res-res pair
+            res_pair_data[key]['atom_pairs'].append((atom_idx_a, atom_idx_b))  # count atom pairs per res-res pair
 
     if not res_pair_data:
         return None
 
-    # ── atom-level 分类 (from CIF atom names + elements) ──
+    # ── atom-level classification (from CIF atom names + elements) ──
     cif_a = cif[chain_A]
     cif_b = cif[chain_B]
 
@@ -422,17 +422,17 @@ def compute_features(npz_path, cif_path, full_lengths, row):
 
     backbone_names = {'N', 'CA', 'C', 'O'}
 
-    for (res_i, res_j), data in res_pair_data.items(): #这里面的data变量包括{'dists':, 'atom_pairs':}
+    for (res_i, res_j), data in res_pair_data.items():  # data = {'dists':..., 'atom_pairs':...}
         for atom_idx_a, atom_idx_b in data['atom_pairs']:
             dist = float(np.linalg.norm(coords_a[atom_idx_a] - coords_b[atom_idx_b]))
-            total_atom_contacts += 1  #dist<5的原子对，不需要筛选是因为从ckdtree来的
+            total_atom_contacts += 1  # atom pairs within 5 Å (already filtered by the cKDTree query)
 
             # clash
             if dist < DIST_CLASH:
                 clash_residues.add(res_i)
                 clash_residues.add(res_j)
 
-            # CIF atom info (atom_idx_a/atom_idx_b 对应 chain A/B 内的全局原子索引)
+            # CIF atom info (atom_idx_a/atom_idx_b are global atom indices within chain A/B)
             if atom_idx_a < len(cif_a['names']) and atom_idx_b < len(cif_b['names']):
                 atom_name_a = cif_a['names'][atom_idx_a]
                 atom_name_b = cif_b['names'][atom_idx_b]
@@ -447,17 +447,17 @@ def compute_features(npz_path, cif_path, full_lengths, row):
                 if dist < DIST_HBOND and ((element_a == 'N' and element_b == 'O') or (element_a == 'O' and element_b == 'N')):
                     hbond_count += 1
 
-                # salt bridge & repulsive (from CIF residue types), 注意这里的dist是≤5A
+                # salt bridge & repulsive (from CIF residue types); note dist is <= 5 Å here
                 res_type_a = cif_a['res_types'][atom_idx_a]
                 res_type_b = cif_b['res_types'][atom_idx_b]
                 charge_a = AA3_CHARGE.get(res_type_a, 0)
                 charge_b = AA3_CHARGE.get(res_type_b, 0)
                 if charge_a * charge_b == -1:
-                    salt_count += 1  #相吸，代表salt bridge
+                    salt_count += 1  # attractive -> salt bridge
                 elif charge_a * charge_b == 1:
-                    rep_count += 1  #互斥,代表repulsive contact
+                    rep_count += 1  # repulsive -> repulsive contact
 
-    # ── 非 clash 的 interfacial pairs（仅排除 clash，不过滤 pLDDT/PAE）──
+    # ── non-clash interfacial pairs (only exclude clash; no pLDDT/PAE filter) ──
     filtered_pairs = []
     for (res_i, res_j), data in res_pair_data.items():
         if res_i in clash_residues or res_j in clash_residues: continue
@@ -465,24 +465,24 @@ def compute_features(npz_path, cif_path, full_lengths, row):
 
     num_residue_contacts = len(filtered_pairs)
 
-    # ── 界面残基数、比例统计（排除 clash，atom contact ≤5Å 即算界面）──
+    # ── interface residue count & ratio (exclude clash; atom contact <= 5 Å counts as interface) ──
     all_if_residues = set()
     for ri, rj, _ in filtered_pairs:
         all_if_residues.add(ri); all_if_residues.add(rj)
     if_residues_num = len(all_if_residues)
     if_residues_percent = if_residues_num / N_res if N_res else 0
 
-    # ── interfacial pLDDT（所有界面残基，不过滤）──
+    # ── interfacial pLDDT (all interface residues, unfiltered) ──
     plddt_if = [plddt[r] for r in all_if_residues] if all_if_residues else [0]
     if_plddt_avg = float(np.mean(plddt_if))
     if_plddt_max = float(np.max(plddt_if))
     if_plddt_min = float(np.min(plddt_if))
 
-    # ── pLDDT 差异（过滤后 pairs ）──
+    # ── pLDDT difference (filtered pairs) ──
     diffs = [abs(float(plddt[ri])-float(plddt[rj])) for ri, rj, _ in filtered_pairs]
     if_plddt_diff_mean = float(np.mean(diffs)) if diffs else 0.0
 
-    # ── PAE(过滤clash pair) ──
+    # ── PAE (clash-filtered pairs) ──
     pae_values, pae_diffs = [], []
     for ri, rj, _ in filtered_pairs:
         pae_ij, pae_ji = float(pae[ri, rj]), float(pae[rj, ri])
@@ -496,7 +496,7 @@ def compute_features(npz_path, cif_path, full_lengths, row):
     uf_pae = [float(pae[ri, rj]) for (ri, rj) in res_pair_data]
     unfiltered_if_pae_mean = float(np.mean(uf_pae)) if uf_pae else 0.0
 
-    # ── contact scores(过滤clash pair) ──
+    # ── contact scores (clash-filtered pairs) ──
     contact_scores = []
     for ri, rj, data in filtered_pairs:
         n_atom_pairs = len(data['atom_pairs'])
@@ -541,7 +541,7 @@ def compute_features(npz_path, cif_path, full_lengths, row):
         'atom_contacts_per_residue_avg': atom_contacts_per_residue_avg,
         'pdockq_e': pdockq_e, 'pdockq_e_v2': pdockq_e_v2,
     }
-    # ── ipSAE (19 个界面指标, 与当前 RF 模型特征一致) ──
+    # ── ipSAE (19 interface metrics, matching the current RF model features) ──
     ipsae = compute_ipsae(pae, asym_id, pae_cutoff=10.0)
     if ipsae:
         feats.update(ipsae)
