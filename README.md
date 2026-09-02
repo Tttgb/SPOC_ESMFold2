@@ -71,36 +71,47 @@ matplotlib seaborn py3Dmol ipykernel`
 
 ## 1. Model inference (`batch_inference.py`)
 
-Score a batch of dimers (each with `.cif` + `.npz` from an ESMFold2 multimer
-prediction) and write a table with RF probabilities + all 78 features.
+Score **one** protein dimer (a `.cif` + its matching `.npz` from an ESMFold2
+multimer prediction) with the two chains' UniProt IDs, and write a single row
+with RF probabilities (SPOC ESMFOLD / Structural classifier) + all features.
+No "target" or batch-scanning concept is needed.
 
 ```bash
 python batch_inference.py \
-    --input_dir <dimer_dir> \
-    --target_uniprot <target_UniProt> \
-    --output <out.tsv>
+    --cif <dimer.cif> --npz <dimer.npz> \
+    --uniprot_A <UP_A> --uniprot_B <UP_B> \
+    [--output out.tsv] [--skip_bio]
 
-# Example: the 3 ARF6 candidates in test_input/ (matches test_out.tsv)
-python batch_inference.py --input_dir test_input --target_uniprot P62330 --output ARF6_0.tsv
+# Example: score the IQSEC1–ARF6 dimer in test_input/
+python batch_inference.py \
+    --cif 'test_input/IQSEC1;Q6DN90;1_ARF6.cif' \
+    --npz 'test_input/IQSEC1;Q6DN90;1_ARF6.npz' \
+    --uniprot_A Q6DN90 --uniprot_B P62330 \
+    --output IQSEC1_ARF6.tsv
 
 # Optional: structural features only (skips biological DB loading)
-python batch_inference.py --input_dir test_input --target_uniprot P62330 --output ARF6_0.tsv --skip_bio
+python batch_inference.py --cif <dimer.cif> --npz <dimer.npz> \
+    --uniprot_A <UP_A> --uniprot_B <UP_B> --output out.tsv --skip_bio
 ```
 
 | Argument | Description |
 |---|---|
-| `--input_dir` | Required. Directory containing the dimers' `.cif` + `.npz` |
-| `--target_uniprot` | Required. Target protein UniProt ID (e.g. ARF6 → `P62330`) |
-| `--output` | Output tsv path (default `batch_results.tsv`) |
+| `--cif` | Required. Dimer structure `.cif` file |
+| `--npz` | Required. Matching `.npz` file from ESMFold2 |
+| `--uniprot_A` | Required. UniProt ID of chain A (for biological-feature mapping) |
+| `--uniprot_B` | Required. UniProt ID of chain B |
+| `--output` | Output tsv path (default `inference_result.tsv`) |
 | `--skip_bio` | Skip biological features (use only the structure model) |
 
-**Input format**: ESMFold2 multimer predictions — per dimer a `<dimer_id>.cif`
-(structure) and `<dimer_id>.npz` (containing `plddt`/`pae`/`iptm`, …). If an NPZ
+**Input format**: ESMFold2 multimer prediction output — a `<dimer_id>.cif`
+(structure) and `<dimer_id>.npz` (containing `plddt`/`pae`/`iptm`, …). If the NPZ
 lacks `sample_atom_coords`/`input_asym_id`/…, the script auto-adapts it from the
-CIF into `<dimer_id>_ad.npz`.
+CIF into `<dimer_id>_ad.npz`. The two chains' UniProt IDs (`--uniprot_A` /
+`--uniprot_B`) are used only to map the biological features (BioGRID,
+co-expression, CRISPR, DepMap, ProtT5, AlphaMissense).
 
-**Output columns** (78 total): `gene / uniprot_A / uniprot_B / target / fname /
-n_c+ / score_all_feat / score_struct_only` + 54 structural features (pLDDT, PAE,
+**Output columns**: `uniprot_A / uniprot_B / fname / cif / npz / n_c+ /
+score_all_feat / score_struct_only` + 54 structural features (pLDDT, PAE,
 contacts, chemistry, pDockQ, ipTM, 19 ipSAE terms, …) + 14 biological features
 (BioGRID, co-expression, CRISPR, DepMap, ProtT5, AlphaMissense).
 

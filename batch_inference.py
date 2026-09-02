@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-Batch 推理（打包版）
+SPOC ESMFOLD single-dimer inference
 ========================================
-独立运行包：所有支持数据库 / 模型 / 缓存都在 classifier_package/ 内，
-无需依赖原始 ESMFOLD_filter 目录结构。
+Score ONE protein dimer (a .cif + its matching .npz) and write a single row
+with RF probabilities (SPOC ESMFOLD / Structural classifier) + all features.
+Biological features are mapped via the two chains' UniProt IDs (--uniprot_A /
+--uniprot_B); no "target" or batch-scanning concept is needed.
 
-用法:
-    python batch_inference.py --input_dir <dimer目录> --target_uniprot <目标> --output <out.tsv>
-    python batch_inference.py --input_dir example/ARF6_0 --target_uniprot P62330 --output ARF6_0.tsv
+Usage:
+    python batch_inference.py \
+        --cif <dimer.cif> --npz <dimer.npz> \
+        --uniprot_A <UP_A> --uniprot_B <UP_B> \
+        [--output out.tsv] [--skip_bio]
 
-输出: 一个大表（RF 分数 + 全部特征）
+Output: one-row TSV (RF scores + full feature table)
 """
 
 import os, sys, json, time, gc, pickle, re, glob, argparse
@@ -309,77 +313,77 @@ def _batch_deeploc(ids_to_query, db, cache_dir):
 # 并行 Worker（模块级别，可被 multiprocessing pickle）
 # ══════════════════════════════════════════════════════════
 
-# 全局共享数据（每个 worker 进程通过 initializer 设置一次）
-_WORKER_DB = None
-_WORKER_CONFIG = {}
+# ══════════════════════════════════════════════════════════
+# 单 dimer 计算
+# ══════════════════════════════════════════════════════════
 
-def _init_worker(db_data, t5_path, uniprot_target, skip_bio, full_lengths):
-    """每个 worker 进程初始化时调用一次，加载 T5 嵌入"""
-    global _WORKER_DB, _WORKER_CONFIG
-    _WORKER_DB = db_data
-    _WORKER_DB['t5'] = bio.load_t5_embeddings(t5_path)  # 只加载一次
-    _WORKER_CONFIG = {
-        'uniprot_target': uniprot_target,
-        'skip_bio': skip_bio,
-        'full_lengths': full_lengths,
-    }
+def predict_models(feats, model_paths):
+    """用两个 RF 模型（SPOC ESMFOLD / Structural classifier）对特征打分。"""
+    out = {}
+    for name, mp in model_paths.items():
+        b = pickle.load(open(mp, 'rb'))
+        model, imputer, feature_names = b['model'], b['imputer'], b['features']
+        X = np.array([[feats.get(f, np.nan) for f in feature_names]], dtype=np.float64)
+        if np.isnan(X).all():
+            out[f'score_{name}'] = np.nan
+            continue
+        out[f'score_{name}'] = float(model.predict_proba(imputer.transform(X))[:, 1][0])
+    return out
 
-def _full_worker(pair):
-    """处理单个 pair：adapt + C+ + 结构 + 生物，返回 (info_dict, feats_dict) 不含 RF"""
-    db = _WORKER_DB
-    cfg = _WORKER_CONFIG
+
+def score_dimer(cif_path, npz_path, uniprot_A, uniprot_B,
+                db, skip_bio, full_lengths, model_paths):
+    """计算单个 dimer：adapt + C+ + 结构特征 + 生物特征 + RF 分数。
+
+    返回一个 dict（元信息 + RF 分数 + 全部特征），可直接转为一行 DataFrame。
+    """
+    out = {'uniprot_A': uniprot_A, 'uniprot_B': uniprot_B,
+           'fname': os.path.splitext(os.path.basename(cif_path))[0],
+           'cif': cif_path, 'npz': npz_path, 'n_c+': 0}
     try:
-        npz_path, d = adapt_npz(pair['npz'], pair['cif'])
+        npz_path, d = adapt_npz(npz_path, cif_path)
         if npz_path is None:
-            return {'gene': pair['gene'], 'uniprot_A': pair['uniprot'],
-                    'uniprot_B': cfg['uniprot_target'], 'target': pair['target'],
-                    'fname': pair['fname'], 'npz': pair['npz'], 'cif': pair['cif'],
-                    'n_c+': 0, 'error': 'adapt_failed'}, None
+            out['error'] = 'adapt_failed'
+            return out
+
         cpm = compute_cplus(npz_path)
         n_cplus = cpm['n_positive_contacts'] if cpm else 0
-        # 折叠链实际长度（npz）作为 domain 区间兜底，避免全长未知时误用 99999
+        out['n_c+'] = n_cplus
+
+        # 折叠链实际长度（npz）作为 domain 区间兜底
         _asym = d['input_asym_id'].flatten()
         n_res_a = int((_asym == 0).sum())
         n_res_b = int((_asym == 1).sum())
-        len_a = cfg['full_lengths'].get(pair['uniprot'], n_res_a)
-        len_b = cfg['full_lengths'].get(cfg['uniprot_target'], n_res_b)
-        row = pd.Series({'uniprot_A': pair['uniprot'],
-                         'uniprot_B': cfg['uniprot_target'],
+        len_a = full_lengths.get(uniprot_A, n_res_a)
+        len_b = full_lengths.get(uniprot_B, n_res_b)
+
+        row = pd.Series({'uniprot_A': uniprot_A, 'uniprot_B': uniprot_B,
                          'dom_A_start': 1, 'dom_A_end': len_a,
                          'dom_B_start': 1, 'dom_B_end': len_b,
-                         'dimer_id': pair['fname']})
-        feats = compute_struct(npz_path, pair['cif'], cfg['full_lengths'], row)
+                         'dimer_id': out['fname']})
+        feats = compute_struct(npz_path, cif_path, full_lengths, row)
         if feats is None:
-            return {'gene': pair['gene'], 'uniprot_A': pair['uniprot'],
-                    'uniprot_B': cfg['uniprot_target'], 'target': pair['target'],
-                    'fname': pair['fname'], 'npz': npz_path, 'cif': pair['cif'],
-                    'n_c+': 0, 'error': 'struct_fail'}, None
+            out['error'] = 'struct_fail'
+            return out
         feats['n_positive_contacts'] = n_cplus
         if cpm is not None:
-            # 当前 rf_struct 模型需要 plddt_A/plddt_B（compute_contacts 已返回）
+            # Structural classifier 需要 plddt_A/plddt_B（compute_contacts 已返回）
             feats['plddt_A'] = cpm['plddt_A']
             feats['plddt_B'] = cpm['plddt_B']
 
-        if not cfg['skip_bio']:
-            row2 = pd.Series({'uniprot_A': pair['uniprot'],
-                              'uniprot_B': cfg['uniprot_target'],
+        if not skip_bio:
+            row2 = pd.Series({'uniprot_A': uniprot_A, 'uniprot_B': uniprot_B,
                               'dom_A_start': 1, 'dom_A_end': len_a,
                               'dom_B_start': 1, 'dom_B_end': len_b,
-                              'dimer_id': pair['fname']})
+                              'dimer_id': out['fname']})
             feats.update(extract_bio_features(row2, db, npz_path=npz_path))
 
-        info = {'gene': pair['gene'], 'uniprot_A': pair['uniprot'],
-                'uniprot_B': cfg['uniprot_target'], 'target': pair['target'],
-                'fname': pair['fname'], 'npz': npz_path, 'cif': pair['cif'],
-                'n_c+': n_cplus}
-        return info, feats
+        out.update(predict_models(feats, model_paths))
+        out.update(feats)
+        return out
     except Exception as e:
-        info = {'gene': pair['gene'], 'uniprot_A': pair['uniprot'],
-                'uniprot_B': pair.get('uniprot_B', _WORKER_CONFIG.get('uniprot_target', '')),
-                'target': pair['target'],
-                'fname': pair['fname'], 'npz': pair['npz'], 'cif': pair['cif'],
-                'n_c+': 0, 'error': str(e)[:100]}
-        return info, None
+        out['error'] = str(e)[:100]
+        return out
 
 
 # ══════════════════════════════════════════════════════════
@@ -387,133 +391,57 @@ def _full_worker(pair):
 # ══════════════════════════════════════════════════════════
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument('--input_dir', required=True,
-                   help='包含 dimer 的 .cif + .npz 目录')
-    p.add_argument('--output', default='batch_results.tsv')
-    p.add_argument('--target_uniprot', required=True,
-                   help='目标蛋白的 UniProt ID（如 ARF6→P62330）')
-    p.add_argument('--skip_bio', action='store_true', help='跳过生物特征（只用 struct 模型）')
+    p = argparse.ArgumentParser(
+        description='Score a single protein dimer (CIF + NPZ) with the two '
+                    "chains' UniProt IDs (SPOC ESMFOLD / Structural classifier).")
+    p.add_argument('--cif', required=True, help='dimer structure .cif file')
+    p.add_argument('--npz', required=True, help='matching .npz file from ESMFold2')
+    p.add_argument('--uniprot_A', required=True, help='UniProt ID of chain A')
+    p.add_argument('--uniprot_B', required=True, help='UniProt ID of chain B')
+    p.add_argument('--output', default='inference_result.tsv', help='output tsv path')
+    p.add_argument('--skip_bio', action='store_true',
+                   help='skip biological features (use only the structure model)')
     args = p.parse_args()
 
-    # ── 加载数据库 ──
+    if not os.path.exists(args.cif):
+        sys.exit(f'CIF not found: {args.cif}')
+    if not os.path.exists(args.npz):
+        sys.exit(f'NPZ not found: {args.npz}')
+
+    # ── 生物数据库（--skip_bio 时跳过）──
     if not args.skip_bio:
         db = load_databases()
+        # 缓存预热：只需两个链的 UniProt ID
+        uniprots = {args.uniprot_A, args.uniprot_B}
+        _batch_am_data(db, uniprots)
+        _batch_mygene(uniprots, db)
+        _batch_deeploc(uniprots, db, bio.CACHE_DIR)
+        t5_path = os.path.join(bio.SPOC_DIR, 'ProtT5_embedding/per-protein.h5')
+        db['t5'] = bio.load_t5_embeddings(t5_path)   # 单进程直接加载（h5py 不可 pickle）
     else:
         db = {}
 
-    # ── 扫描 pairs ──
-    cif_files = sorted(glob.glob(os.path.join(args.input_dir, '*.cif')))
-    pairs = []
-    for cf in cif_files:
-        base = os.path.splitext(cf)[0]
-        nz = base + '.npz'
-        if not os.path.exists(nz):
-            print(f"[跳过] 无 NPZ: {cf}")
-            continue
-        # 解析文件名: {gene};{uniprot};{model}_{target}
-        fname = os.path.splitext(os.path.basename(cf))[0]
-        parts = fname.split(';')
-        if len(parts) < 2:
-            print(f"[跳过] 无法解析: {fname}")
-            continue
-        gene, uniprot = parts[0], parts[1]
-        target = fname.rsplit('_', 1)[-1]
-        pairs.append({'gene': gene, 'uniprot': uniprot, 'target': target,
-                      'cif': cf, 'npz': nz, 'fname': fname})
-
-    print(f"共 {len(pairs)} 个 pair")
-
-    # ── 预加载结构特征依赖 ──
+    # ── 结构特征依赖 + RF 模型 ──
     full_lengths = load_full_lengths(FASTA_PATH)
-
-    # ── 批量缓存预热（数据库已预缓存，通常是空操作）──
-    uniprot_target = args.target_uniprot
-    all_uniprots = {uniprot_target} | {p['uniprot'] for p in pairs}
-    if not args.skip_bio:
-        print(f"[缓存] 批量预热 {len(all_uniprots)} 个 UniProt ID ...")
-        t_cache = time.time()
-        _batch_am_data(db, all_uniprots)
-        _batch_mygene(all_uniprots, db)
-        _batch_deeploc(all_uniprots, db, bio.CACHE_DIR)
-        print(f"[缓存] 完成 ({time.time()-t_cache:.0f}s)")
-
-    # ── 加载 RF 模型 ──
     models = {
         'all_feat': os.path.join(MODEL_DIR, 'rf_all_feat_model.pkl'),
         'struct_only': os.path.join(MODEL_DIR, 'rf_struct_feat_model.pkl'),
     }
 
-    # ── 全并行：每 worker 提取特征（不含 RF），RF 留到主进程批量预测 ──
-    from multiprocessing import Pool, cpu_count
-    n_workers = min(cpu_count(), 32)
+    # ── 打分（单 dimer）──
+    print(f'Scoring: {os.path.basename(args.cif)}  ({args.uniprot_A} / {args.uniprot_B})')
+    row = score_dimer(args.cif, args.npz, args.uniprot_A, args.uniprot_B,
+                      db, args.skip_bio, full_lengths, models)
+    df = pd.DataFrame([row])
+    df.to_csv(args.output, sep='\t', index=False)
 
-    # T5 (h5py) 不可 pickle，用 initializer 让每个 worker 加载一次
-    t5_path = os.path.join(bio.SPOC_DIR, 'ProtT5_embedding/per-protein.h5')
-    db_for_workers = {k: v for k, v in db.items() if k != 't5'}
-
-    print(f"[并行] {len(pairs)} pairs, {n_workers} workers ...")
-    results = []
-    all_feats = []
-    t0 = time.time()
-    with Pool(n_workers, initializer=_init_worker,
-              initargs=(db_for_workers, t5_path,
-                        uniprot_target, args.skip_bio, full_lengths)) as pool:
-        for i, (info, feats) in enumerate(pool.imap_unordered(_full_worker, pairs, chunksize=3)):
-            results.append(info)
-            all_feats.append(feats)
-            if (i + 1) % 50 == 0:
-                print(f"  [{i+1}/{len(pairs)}] {time.time()-t0:.0f}s")
-
-    # ── 主进程批量 RF 预测（用满所有 CPU 核心）──
-    print(f"[RF] 主进程批量预测 {len(results)} 条 ...")
-    t_rf = time.time()
-    for name, mp in models.items():
-        b = pickle.load(open(mp, 'rb'))
-        model = b['model']
-        imputer = b['imputer']
-        feature_names = b['features']
-        if hasattr(model, 'n_jobs'):
-            model.n_jobs = -1  # 用满所有核心
-
-        # 构建特征矩阵
-        X = np.full((len(all_feats), len(feature_names)), np.nan, dtype=np.float64)
-        for j, feats in enumerate(all_feats):
-            if feats is None:
-                continue
-            for k, fname in enumerate(feature_names):
-                X[j, k] = feats.get(fname, np.nan)
-
-        # 排除特征为空的样本
-        valid = ~np.isnan(X).all(axis=1)
-        scores = np.full(len(all_feats), np.nan, dtype=np.float64)
-        if valid.any():
-            X_imp = imputer.transform(X[valid])
-            scores[valid] = model.predict_proba(X_imp)[:, 1]
-
-        for j, s in enumerate(scores):
-            results[j][f'score_{name}'] = float(s) if not np.isnan(s) else np.nan
-
-    print(f"[RF] 完成 ({time.time()-t_rf:.0f}s)")
-
-    # ── 保存：RF 分数 + 全部特征合并成一个大表 ──
-    big_rows = []
-    for info, feats in zip(results, all_feats):
-        r = dict(info)
-        if feats:
-            r.update(feats)
-        big_rows.append(r)
-    df_big = pd.DataFrame(big_rows)
-    df_big.to_csv(args.output, sep='\t', index=False)
-    print(f"\n完成: {len(df_big)} 条 → {args.output}  ({len(df_big.columns)} 列)")
-
-    # ── 统计 ──
-    if 'score_all_feat' in df_big.columns:
-        print(f"  all_feat:     mean={df_big['score_all_feat'].mean():.4f}, "
-              f"median={df_big['score_all_feat'].median():.4f}")
-    if 'score_struct_only' in df_big.columns:
-        print(f"  struct_only:  mean={df_big['score_struct_only'].mean():.4f}, "
-              f"median={df_big['score_struct_only'].median():.4f}")
+    print(f'\n完成: 1 条 → {args.output} ({len(df.columns)} 列)')
+    for c in ['score_all_feat', 'score_struct_only']:
+        if c in df.columns:
+            v = df[c].iloc[0]
+            print(f'  {c}: {v:.6f}' if pd.notna(v) else f'  {c}: NaN')
+    if 'error' in df.columns and pd.notna(df['error']).any():
+        print('  注意:', df['error'].iloc[0])
 
     # 关闭 T5
     if 't5' in db and hasattr(db['t5'], 'close'):
