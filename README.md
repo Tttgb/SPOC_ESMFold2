@@ -268,6 +268,6 @@ regenerated with `scripts/param_sweep_aupr_heatmap.py`
 
 ## License
 
-MIT — see `LICENSE` (replace with your preferred license if needed).
+MIT — see `LICENSE`.
 
 For questions, please open an issue.
