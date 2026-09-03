@@ -8,7 +8,7 @@ Biological features are mapped via the two chains' UniProt IDs (--uniprot_A /
 --uniprot_B); no "target" or batch-scanning concept is needed.
 
 Usage:
-    python batch_inference.py \
+    python inference.py \
         --cif <dimer.cif> --npz <dimer.npz> \
         --uniprot_A <UP_A> --uniprot_B <UP_B> \
         [--output out.tsv] [--skip_bio]

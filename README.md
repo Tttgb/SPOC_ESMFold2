@@ -4,7 +4,7 @@
 
 A **domain–domain interaction (DDI) classifier / interaction scorer** built on
 **ESMFold2 predicted structures + public biological databases**, shipped as a
-self-contained GitHub repository with a batch-inference script and a notebook
+self-contained GitHub repository with an inference script and a notebook
 that reproduces the paper's evaluation figures.
 
 - **Models**: Random Forest, three variants
@@ -12,7 +12,7 @@ that reproduces the paper's evaluation figures.
   - `Structural classifier` (49 structural features after iterative pruning)
   - `degree-match RF` (pure interaction-network degree features, used as a
     data-leakage check baseline)
-- **Inference**: `batch_inference.py` — scores a set of dimers (CIF/NPZ) and
+- **Inference**: `inference.py` — scores one protein dimer (CIF/NPZ) and
   outputs RF probabilities plus a full feature table
 - **Reproduction**: `notebooks/visualization.ipynb` — reproduces the paper's
   figures (Fig 1D / 3A–3D / 4A–4B + supplementary AUPR and hyperparameter-sweep
@@ -26,7 +26,7 @@ that reproduces the paper's evaluation figures.
 classifier_package/
 ├── README.md
 ├── requirements.txt
-├── batch_inference.py              # batch inference entry point
+├── inference.py                   # inference entry point
 ├── modules/                        # feature-computation modules
 │   ├── structure_feature_export.py # structural features (pLDDT/PAE/contacts/ipSAE…)
 │   ├── compute_contacts.py         # positive-contact (C+) computation
@@ -77,10 +77,10 @@ deliberately **not** listed in `requirements.txt`. The shipped cache
 `data/deeploc_output/cache_deeploc.pkl` already covers **all 20,416 proteins** in
 the datasets, so inference **never** calls DeepLoc in normal use.
 
-Only if you score a protein **absent from the cache** will `batch_inference.py`
+Only if you score a protein **absent from the cache** will `inference.py`
 invoke the `deeploc2` command-line tool on the fly (see the DeepLoc note in the
-Data section). `batch_inference.py` calls `deeploc2` simply as a subprocess, so
-install it into **whatever Python environment you run `batch_inference.py` in**
+Data section). `inference.py` calls `deeploc2` simply as a subprocess, so
+install it into **whatever Python environment you run `inference.py` in**
 — it only needs to be on `$PATH`; no particular conda environment is required.
 Install per the official instructions:
 
@@ -88,7 +88,7 @@ Install per the official instructions:
 - Publication: Ødum *et al.*, *Nucleic Acids Research*, 2024, doi:10.1093/nar/gkae237
 
 ```bash
-# in the same environment used to run batch_inference.py (GPU + PyTorch needed)
+# in the same environment used to run inference.py (GPU + PyTorch needed)
 pip install torch --index-url https://download.pytorch.org/whl/cu124
 pip install -e <path/to/deeploc2_package>   # from the official DeepLoc 2.1 distribution
 ```
@@ -96,7 +96,7 @@ pip install -e <path/to/deeploc2_package>   # from the official DeepLoc 2.1 dist
 
 ---
 
-## 1. Model inference (`batch_inference.py`)
+## 1. Model inference (`inference.py`)
 
 Score **one** protein dimer (a `.cif` + its matching `.npz` from an ESMFold2
 multimer prediction) with the two chains' UniProt IDs, and write a single row
@@ -104,20 +104,20 @@ with RF probabilities (SPOC ESMFOLD / Structural classifier) + all features.
 No "target" or batch-scanning concept is needed.
 
 ```bash
-python batch_inference.py \
+python inference.py \
     --cif <dimer.cif> --npz <dimer.npz> \
     --uniprot_A <UP_A> --uniprot_B <UP_B> \
     [--output out.tsv] [--skip_bio]
 
 # Example: score the IQSEC1–ARF6 dimer in test_input/
-python batch_inference.py \
+python inference.py \
     --cif 'test_input/IQSEC1;Q6DN90;1_ARF6.cif' \
     --npz 'test_input/IQSEC1;Q6DN90;1_ARF6.npz' \
     --uniprot_A Q6DN90 --uniprot_B P62330 \
     --output IQSEC1_ARF6.tsv
 
 # Optional: structural features only (skips biological DB loading)
-python batch_inference.py --cif <dimer.cif> --npz <dimer.npz> \
+python inference.py --cif <dimer.cif> --npz <dimer.npz> \
     --uniprot_A <UP_A> --uniprot_B <UP_B> --output out.tsv --skip_bio
 ```
 
@@ -137,7 +137,7 @@ biological features (BioGRID, co-expression, CRISPR, DepMap, ProtT5,
 AlphaMissense).
 
 > **The stock ESMFold2 example does not write an `.npz`** — it only saves the
-> `.cif`. `batch_inference.py` needs the `.npz` companion because the structural
+> `.cif`. `inference.py` needs the `.npz` companion because the structural
 > features are computed from `plddt`/`pae`/`iptm` and atom coordinates, not from
 > the CIF alone. Use the reference runner `scripts/esmfold2_predict_save_npz.py`
 > (the same BioHub ESMFold2 API as the official example) to produce both files:
@@ -150,7 +150,7 @@ AlphaMissense).
 > ```
 >
 > Only `plddt`/`pae`/`iptm` (plus `ptm`) are required in the `.npz`. If atom
-> coordinates / chain assignment are absent, `batch_inference.py` auto-derives
+> coordinates / chain assignment are absent, `inference.py` auto-derives
 > them from the `.cif` into `<dimer_id>_ad.npz`.
 
 **Output columns**: `uniprot_A / uniprot_B / fname / cif / npz / n_c+ /
@@ -213,7 +213,7 @@ The Setup cell auto-points `DATA` to `data/analysis/` (override with
 > **all 20,416 involved proteins**, so inference reads the cache and never needs
 > to run DeepLoc. Only if you score a brand-new protein (not in the cache) will
 > the script invoke `deeploc2` on the fly — install it in the environment used
-> to run `batch_inference.py` (see the install note above).
+> to run `inference.py` (see the install note above).
 
 ### Not shipped — `data/spoc/` (~11 GB raw, ~3.5 GB compressed)
 
