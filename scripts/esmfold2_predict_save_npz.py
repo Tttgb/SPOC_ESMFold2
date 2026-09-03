@@ -35,6 +35,8 @@ Notes
   (randomized LM dropout), which produces slightly different structures per run.
 """
 import argparse
+import os
+from pathlib import Path
 
 import numpy as np
 from esm.models.esmfold2 import (
@@ -65,6 +67,9 @@ def main():
                     help="number of diffusion sampling steps")
     ap.add_argument("--lm_dropout", type=float, default=0.0,
                     help="LM dropout; 0 = deterministic fold")
+    ap.add_argument("--ccd", default=None,
+                    help="path to the CCD cache directory (parent of ccd.pkl); "
+                         "defaults to the parent of $ESMCFOLD_CCD_PATH if set")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -78,7 +83,10 @@ def main():
     ])
 
     # ---- fold (same call as the official example) ----
-    result = ESMFold2InputBuilder().fold(
+    ccd_cache = args.ccd
+    if ccd_cache is None and os.environ.get("ESMCFOLD_CCD_PATH"):
+        ccd_cache = str(Path(os.environ["ESMCFOLD_CCD_PATH"]).parent)
+    result = ESMFold2InputBuilder(ccd_cache=ccd_cache).fold(
         model, spi,
         num_loops=args.num_loops,
         num_sampling_steps=args.num_sampling_steps,
