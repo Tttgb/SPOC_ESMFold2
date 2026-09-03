@@ -27,6 +27,8 @@ classifier_package/
 ├── README.md
 ├── requirements.txt
 ├── inference.py                   # inference entry point
+├── supplementary_table_1_structure_only.csv  # Supp. Table 1: 49 features of the Structural classifier (with descriptions)
+├── supplementary_table_2_all_feature.csv     # Supp. Table 2: 39 features of SPOC ESMFOLD (25 structural + 14 biological)
 ├── modules/                        # feature-computation modules
 │   ├── structure_feature_export.py # structural features (pLDDT/PAE/contacts/ipSAE…)
 │   ├── compute_contacts.py         # positive-contact (C+) computation
