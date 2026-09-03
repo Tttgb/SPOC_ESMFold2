@@ -16,7 +16,7 @@ Usage:
 Output: one-row TSV (RF scores + full feature table)
 """
 
-import os, sys, json, time, gc, pickle, re, glob, argparse
+import os, sys, json, time, gc, pickle, re, glob, argparse, subprocess
 import numpy as np
 import pandas as pd
 
@@ -49,10 +49,61 @@ bio.FEAT_DIR   = DATA_DIR
 # ── 全局数据库缓存（进程级，只加载一次）──
 _DB_CACHE = {}
 
+# ── 生物特征数据库完整性检查 + 自动下载 ──
+# 生物特征依赖 data/spoc/ 下的公共数据库；若缺失则自动运行
+# scripts/download_spoc_db.sh（从 Zenodo 拉取约 3.5 GB）。
+_SPOC_REQUIRED_DIRS = ['CoexpressDB']
+_SPOC_REQUIRED_FILES = [
+    'AlphaMissence/AlphaMissense_aa_substitutions.tsv',
+    'DepMap/CRISPRGeneEffect.csv',
+    'ProtT5_embedding/per-protein.h5',
+    'biogrid/BIOGRID-ALL-5.0.258.tab3.txt',
+    'biogrid/biogrid_ORCS/protein_hit_screens.pkl',
+]
+
+
+def _spoc_complete():
+    """data/spoc/ 生物数据库是否齐备（所需目录与关键文件都在）"""
+    if not os.path.isdir(SPOC_DIR):
+        return False
+    for d in _SPOC_REQUIRED_DIRS:
+        if not os.path.isdir(os.path.join(SPOC_DIR, d)):
+            return False
+    for f in _SPOC_REQUIRED_FILES:
+        if not os.path.isfile(os.path.join(SPOC_DIR, f)):
+            return False
+    return True
+
+
+def ensure_spoc_db():
+    """若 data/spoc/ 生物数据库缺失/不完整，自动运行下载脚本；
+    下载后仍不完整则给出错误并退出（可用 --skip_bio 跳过生物特征）。"""
+    if _spoc_complete():
+        return
+    print(f"[DB] data/spoc/ 生物数据库不完整，自动下载约 3.5 GB（需网络）...")
+    script = os.path.join(PACKAGE_DIR, 'scripts', 'download_spoc_db.sh')
+    if not os.path.isfile(script):
+        sys.exit(f"[DB] 未找到下载脚本: {script}\n"
+                 f"     请按 README 手动准备 data/spoc/，或使用 --skip_bio 只做结构推理。")
+    print(f"[DB] 运行: bash {script}")
+    try:
+        rc = subprocess.run(['bash', script]).returncode
+    except Exception as e:
+        rc = -1
+        print(f"[DB] 运行下载脚本失败: {e}")
+    if rc != 0:
+        print(f"[DB] 下载脚本退出码: {rc}")
+    if not _spoc_complete():
+        sys.exit(f"[DB] data/spoc/ 下载后仍不完整。请检查网络/磁盘后重试，"
+                 f"或使用 --skip_bio 只做结构特征推理。")
+
+
 def load_databases():
     """加载生物数据库，结果缓存在全局 dict 中"""
     if _DB_CACHE:
         return _DB_CACHE
+
+    ensure_spoc_db()  # 缺失则自动下载
 
     import biology_feature_export as bio
     print("[DB] 加载数据库 (仅一次) ...")
