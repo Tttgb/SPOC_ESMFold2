@@ -43,7 +43,7 @@ classifier_package/
 │   │   ├── test.tsv / train.tsv
 │   │   ├── rf_all_feat_model.pkl / rf_struct_feat_model.pkl / rf_degree_match_model.pkl
 │   │   ├── rf_importance_{allfeat,structfeat}.csv          # Gini importance (feature, importance) → Fig 4
-│   │   ├── domain_pairs_stats.csv  # pre-extracted data for Fig 1D
+│   │   ├── domain_pairs_stats.csv  # XL-MS-only data for Fig 1D
 │   │   └── param_sweep_aupr_results_{all,struct}.csv  # pre-computed sweep results (optional; the notebook re-runs the scan)
 │   └── spoc/                       # 11 GB biological DB (NOT shipped; see Data)
 ├── scripts/
