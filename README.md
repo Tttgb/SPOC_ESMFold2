@@ -98,10 +98,10 @@ pip install -e <path/to/deeploc2_package>   # from the official DeepLoc 2.1 dist
 
 ## 1. Model inference (`inference.py`)
 
-Score **one** protein dimer (a `.cif` + its matching `.npz` from an ESMFold2
-multimer prediction) with the two chains' UniProt IDs, and write a single row
-with RF probabilities (SPOC ESMFOLD / Structural classifier) + all features.
-No "target" or batch-scanning concept is needed.
+Score a protein dimer (a `.cif` + its matching `.npz` from an ESMFold2 multimer
+prediction) with the two chains' UniProt IDs, writing a single row of RF
+probabilities (SPOC ESMFOLD / Structural classifier) plus the full feature
+table.
 
 ```bash
 python inference.py \
