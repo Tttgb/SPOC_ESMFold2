@@ -21,10 +21,10 @@ import numpy as np
 import pandas as pd
 
 # ══════════════════════════════════════════════════════════
-# 打包路径配置（可按需通过环境变量覆盖）
+# Package path configuration (override with CLASSIFIER_PACKAGE if needed)
 # ══════════════════════════════════════════════════════════
 PACKAGE_DIR = os.environ.get('CLASSIFIER_PACKAGE',
-                             '/home/data/xjd/ESMFOLD_filter/classifier_package')
+                             os.path.dirname(os.path.abspath(__file__)))
 MODULES_DIR = os.path.join(PACKAGE_DIR, 'modules')
 DATA_DIR    = os.path.join(PACKAGE_DIR, 'data')
 SPOC_DIR    = os.path.join(DATA_DIR, 'spoc')
