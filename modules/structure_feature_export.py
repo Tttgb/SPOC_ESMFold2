@@ -13,7 +13,10 @@ from scipy.spatial import cKDTree # type: ignore
 from tqdm import tqdm
 from Bio.PDB.MMCIFParser import MMCIFParser
 
-BASE = '/home/data/xjd/ESMFOLD_filter'
+# Resolve paths relative to the repository root; override with CLASSIFIER_PACKAGE if needed.
+BASE = os.environ.get(
+    'CLASSIFIER_PACKAGE',
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 IN_DIR = os.path.join(BASE, 'homology_reduce_2nd')
 OUT_DIR = os.path.join(BASE, 'FP_classifier')
 NPZ_DIR = os.path.join(BASE, 'output_domain')

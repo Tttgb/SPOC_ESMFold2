@@ -21,7 +21,10 @@ from scipy.spatial.distance import cosine, euclidean
 from tqdm import tqdm
 import requests, time
 
-BASE = '/home/data/xjd/ESMFOLD_filter'
+# Resolve paths relative to the repository root; override with CLASSIFIER_PACKAGE if needed.
+BASE = os.environ.get(
+    'CLASSIFIER_PACKAGE',
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FEAT_DIR = os.path.join(BASE, 'FP_classifier')
 CACHE_DIR = os.path.join(FEAT_DIR, 'deeploc_output')
 SPOC_DIR = os.path.join(BASE, 'SPOC_related_dataset')
