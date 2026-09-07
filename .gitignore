@@ -14,6 +14,10 @@ figures/
 .ipynb_checkpoints/
 notebooks/.ipynb_checkpoints/
 
+# ---- Supplementary tables (kept locally, not uploaded to GitHub) ----
+supplementary_table_1_structural classifier.csv
+supplementary_table_2_SPOC_ESMFold2.csv
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
