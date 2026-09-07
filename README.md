@@ -34,7 +34,7 @@ classifier_package/
 │   ├── compute_contacts.py         # positive-contact (C+) computation
 │   └── biology_feature_export.py   # biological features (BioGRID/Coexpr/CRISPR/DepMap/T5/AM)
 ├── notebooks/
-│   └── visualization.ipynb         # paper-figure reproduction notebook (English)
+│   └── visualization.ipynb         # paper-figure reproduction notebook
 ├── data/
 │   ├── models/                     # inference models (shipped)
 │   ├── deeploc_output/             # DeepLoc / ID-mapping caches (shipped; AlphaMissense cache excluded)
@@ -76,8 +76,8 @@ matplotlib seaborn py3Dmol ipykernel`
 `colocalization_match_score` uses **DeepLoc 2.1** subcellular localisation.
 DeepLoc 2.1 is a **standalone prediction tool** (not a PyPI package), so it is
 deliberately **not** listed in `requirements.txt`. The shipped cache
-`data/deeploc_output/cache_deeploc.pkl` already covers **all 20,416 proteins** in
-the datasets, so inference **never** calls DeepLoc in normal use.
+`data/deeploc_output/cache_deeploc.pkl` already covers **20,416 human proteins** in
+the datasets, so inference hardly calls DeepLoc in normal use.
 
 Only if you score a protein **absent from the cache** will `inference.py`
 invoke the `deeploc2` command-line tool on the fly (see the DeepLoc note in the
@@ -168,8 +168,7 @@ contacts, chemistry, pDockQ, ipTM, 19 ipSAE terms, …) + 14 biological features
 
 ## 2. Paper-figure reproduction (`notebooks/visualization.ipynb`)
 
-A single **English** notebook, organized **one cell per figure**, that
-reproduces the paper's evaluation figures from the final datasets only:
+A notebook organized one cell per figure that reproduces the paper's evaluation figures from the final datasets only:
 
 | Cell | Figure | Content |
 |------|--------|---------|
